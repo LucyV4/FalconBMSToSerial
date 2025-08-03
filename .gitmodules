@@ -1,0 +1,3 @@
+[submodule "falcon-memreader"]
+	path = falcon-memreader
+	url = https://github.com/dglava/falcon-memreader
