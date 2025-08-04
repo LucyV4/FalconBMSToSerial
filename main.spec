@@ -22,7 +22,7 @@ exe = EXE(
     a.binaries,
     a.datas,
     [],
-    name='main',
+    name='FalconBMSToSerial',
     debug=False,
     icon='icon.ico',
     bootloader_ignore_signals=False,
