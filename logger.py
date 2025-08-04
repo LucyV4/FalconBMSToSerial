@@ -1,5 +1,6 @@
-import logging
+import sys
 import queue
+import logging
 from enum import Enum
 from PyQt6.QtCore import QTimer
 from PyQt6.QtGui import QTextCharFormat, QColor
@@ -14,11 +15,20 @@ class LogTypes(Enum):
     WARNING = 2
     ERROR = 3
 
-logging.basicConfig(
-    filename='app.log',
-    level=logging.DEBUG,
-    format='[%(asctime)s] %(levelname)s: %(message)s',
-)
+DEBUG_MODE = not getattr(sys, 'frozen', False)
+
+if DEBUG_MODE:
+    logging.basicConfig(
+        filename='app.log',
+        level=logging.DEBUG,
+        format='[%(asctime)s] %(levelname)s: %(message)s'
+    )
+else:
+    logging.basicConfig(
+        level=logging.INFO,
+        format='[%(asctime)s] %(levelname)s: %(message)s'
+    )
+
 # Setup standard logging to file
 def log_info(msg):
     logging.info(msg)
