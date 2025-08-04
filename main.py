@@ -2,18 +2,19 @@ import sys
 import os
 from datetime import datetime
 from typing import List
-from serialsender import SerialSender
+from bms_serial import SerialSender, detect_serial_ports
+from memreader import check_game_active, get_game_version
 from logger import log_info, log_error, log_status, setup_log_timer, clear_log
 from PyQt6.QtWidgets import QMainWindow, QApplication, QPushButton, QTabWidget, QWidget, QVBoxLayout, QGridLayout, QTextEdit, QLabel, QSlider
 from PyQt6.QtCore import Qt, QSettings, QTimer
 from PyQt6.QtGui import QFont, QIcon
 
 if getattr(sys, 'frozen', False):
-    # Running as bundled by PyInstaller
-    base_path = sys._MEIPASS
+	# Running as bundled by PyInstaller
+	base_path = sys._MEIPASS
 else:
-    # Running from source
-    base_path = os.path.abspath(".")
+	# Running from source
+	base_path = os.path.abspath(".")
 
 class QTMainTab(QWidget):
 	def __init__(self, parent, init_freq: int = 250, init_ports: List[str] = []):
@@ -29,12 +30,19 @@ class QTMainTab(QWidget):
 		# Serial sender button
 		self.serial_start_stop_button = QPushButton("Start serial")
 		self.serial_start_stop_button.clicked.connect(self.start_stop_serial)
-		self.serial_start_stop_label = QLabel("Inactive", alignment=Qt.AlignmentFlag.AlignCenter)
+		self.serial_start_stop_button.setEnabled(False)
+		self.serial_start_stop_label = QLabel("Game not running", alignment=Qt.AlignmentFlag.AlignCenter)
 		self.serial_start_stop_label.setStyleSheet("QLabel { color: darkred; font-weight: normal; }")
 
-		self.timer = QTimer()
-		self.timer.timeout.connect(self.update_label_time)
-		self.timer.start(1000)
+		self.active_label_timer = QTimer()
+		self.active_label_timer.timeout.connect(self.update_label_time)
+		self.active_label_timer.start(500)
+
+		self.game_running = False
+		self.update_game_active()
+		self.game_active_timer = QTimer()
+		self.game_active_timer.timeout.connect(self.update_game_active)
+		self.game_active_timer.start(5000)
 
 		# Slider top label
 		frequency_label = QLabel("Frequency (ms):", alignment=Qt.AlignmentFlag.AlignCenter)
@@ -50,10 +58,12 @@ class QTMainTab(QWidget):
 
 		# Serial port list
 		self.serial_port_list = QTextEdit()
+		self.serial_port_list.setPlaceholderText("No serial ports have been added.\n\nAdd one by typing its port, i.e.\nCOM3\n\nIf you have multiple add an enter between each port, i.e.\nCOM3\nCOM4\n\nYou can also click the button below to detect and add all serial ports automatically.")
 		self.serial_port_list.setText("\n".join(self.serial_port_names))
 		self.serial_port_list.textChanged.connect(self.serial_port_list_update)
-
 		self.serial_port_list.setMaximumWidth(200)
+		self.serial_port_detect_button = QPushButton("Detect serial ports")
+		self.serial_port_detect_button.clicked.connect(self.detect_serial_ports)
 
 		# Grid layour and items
 		layout = QGridLayout()
@@ -62,7 +72,8 @@ class QTMainTab(QWidget):
 		layout.addWidget(self.slider_cur_frequency_label, 3, 0, 1, 2)
 		layout.addWidget(self.serial_start_stop_button, 4, 0, 2, 2)
 		layout.addWidget(self.serial_start_stop_label, 5, 0, 1, 2)
-		layout.addWidget(self.serial_port_list, 0, 2, 7, 1)
+		layout.addWidget(self.serial_port_list, 0, 2, 5, 1)
+		layout.addWidget(self.serial_port_detect_button, 5, 2, 1, 1)
 
 		layout.setColumnStretch(0, 2)
 		layout.setColumnStretch(1, 1)
@@ -93,6 +104,7 @@ class QTMainTab(QWidget):
 			self.serial_start_stop_button.setText("Start serial")
 			self.frequency_slider.setEnabled(True)
 			self.serial_port_list.setEnabled(True)
+			self.serial_port_detect_button.setEnabled(True)
 		else:
 			# Update state
 			self.sender = SerialSender(self.serial_port_names)
@@ -106,10 +118,17 @@ class QTMainTab(QWidget):
 			self.serial_start_stop_button.setText("Stop serial")
 			self.frequency_slider.setEnabled(False)
 			self.serial_port_list.setEnabled(False)
+			self.serial_port_detect_button.setEnabled(False)
    
 	def serial_port_list_update(self):
 		self.serial_port_names = [port_name.strip() for port_name in self.serial_port_list.toPlainText().split("\n") if port_name.strip()]
 		self.parent.settings.setValue("main/ports", "\n".join(self.serial_port_names))
+
+	def detect_serial_ports(self):
+		log_info(f"Detecting serial ports")
+		ports = detect_serial_ports()
+		log_info(f"Found ports: {", ".join(ports)}")
+		self.serial_port_list.setText("\n".join(ports))
 
 	def update_label_time(self):
 		if self.serial_active:
@@ -119,8 +138,21 @@ class QTMainTab(QWidget):
 			timer_str = f"{self.active_hours:01d}:{self.active_minutes:02d}:{self.active_seconds:02d}"
 			self.serial_start_stop_label.setText(f"Active ({timer_str})")
 			log_status(f"Sending data ({timer_str})")
-			# sys.stdout.write(f"\rSending data ({timer_str})")
-			# sys.stdout.flush()
+
+	def update_game_active(self):
+		if check_game_active():
+			if not self.game_running:
+				game_version = get_game_version()
+				log_info(f"Found connection with Falcon BMS {game_version}")
+			self.serial_start_stop_button.setEnabled(True)	
+			self.serial_start_stop_label.setText("Inactive")
+			self.game_running = True
+		else:
+			if self.serial_active: self.start_stop_serial()
+			self.serial_start_stop_button.setEnabled(False)
+			self.serial_start_stop_label.setText("Inactive (game not running)")
+			log_error("No connection with Falcon BMS. Is your game running?")
+			self.game_running = False
 
 class QTLogTab(QWidget):
 	def __init__(self):
@@ -162,8 +194,8 @@ class MainWindow(QMainWindow):
 
 		tabs = QTabWidget()
 
-		self.main_tab = QTMainTab(self, init_freq, init_ports)
 		self.log_tab = QTLogTab()
+		self.main_tab = QTMainTab(self, init_freq, init_ports)
 
 		tabs.addTab(self.main_tab, "Controls")
 		tabs.addTab(self.log_tab, "Logs")
@@ -179,7 +211,5 @@ try:
 	app = QApplication(sys.argv)
 	w = MainWindow()
 	app.exec()
-except Exception as e:
-	log_error(f"Closing app due to error: {e}")
 finally:
 	if w.main_tab.serial_active: w.main_tab.sender.stop()

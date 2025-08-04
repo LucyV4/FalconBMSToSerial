@@ -1,11 +1,10 @@
 import serial
+from serial.tools import list_ports
 import time
 import threading
 from typing import List
 from logger import log_info, log_error, log_warning
-from memreader import BMSMemReader
-
-memReader = BMSMemReader()
+from memreader import create_package
 
 class SerialSender:
 	def __init__(self, port_names: List[str]):
@@ -45,7 +44,7 @@ class SerialSender:
 		self.init_ports()
 
 		while self.running:
-			data = memReader.create_package()
+			data = create_package()
 			ports_to_remove = []
 
 			for port in self.serial_ports:
@@ -81,3 +80,12 @@ class SerialSender:
 			except:
 				pass
 		self.serial_ports.clear()
+  
+def detect_serial_ports() -> List[str]:
+	def port_is_valid(port) -> bool:
+		return (port.pid != None and port.vid != None)
+
+	ports = list_ports.comports()
+	ports_used = [port.device for port in ports if port_is_valid(port)]
+
+	return ports_used
