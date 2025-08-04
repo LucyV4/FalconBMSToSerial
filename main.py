@@ -1,8 +1,9 @@
-import time, sys
+import sys
+from datetime import datetime
 from typing import List
 from serialsender import SerialSender
 from PyQt6.QtWidgets import QMainWindow, QApplication, QPushButton, QTabWidget, QWidget, QVBoxLayout, QGridLayout, QTextEdit, QLabel, QSlider, QPlainTextEdit
-from PyQt6.QtCore import Qt, QObject, pyqtSignal, QSettings
+from PyQt6.QtCore import Qt, QObject, pyqtSignal, QSettings, QTimer
 
 class TeeStream:
     def __init__(self, *streams):
@@ -25,16 +26,32 @@ class QTextEditLogger(QObject):
 		super().__init__()
 		self.text_edit = text_edit
 		self.write_signal.connect(self._append_text)
+		self.last_line_overwrite = False
+		self.needs_newline = False
 
 	def write(self, msg):
+		if '\r' in msg:
+			msg = msg.replace('\r', '')
+			self.last_line_overwrite = True
+			self.needs_newline = True
+		elif self.needs_newline:
+			msg = '\n' + msg
+			self.needs_newline = False
+			self.last_line_overwrite = False
 		self.write_signal.emit(str(msg))
 
 	def flush(self):
-		pass  # Required for file-like interface
+		pass
 
 	def _append_text(self, msg):
 		cursor = self.text_edit.textCursor()
 		cursor.movePosition(cursor.MoveOperation.End)
+
+		if self.last_line_overwrite:
+			cursor.select(cursor.SelectionType.LineUnderCursor)
+			cursor.removeSelectedText()
+			self.last_line_overwrite = False
+
 		cursor.insertText(msg)
 		self.text_edit.setTextCursor(cursor)
 		self.text_edit.ensureCursorVisible()
@@ -55,6 +72,10 @@ class QTMainTab(QWidget):
 		self.serial_start_stop_button.clicked.connect(self.start_stop_serial)
 		self.serial_start_stop_label = QLabel("Inactive", alignment=Qt.AlignmentFlag.AlignCenter)
 		self.serial_start_stop_label.setStyleSheet("QLabel { color: darkred; font-weight: normal; }")
+
+		self.timer = QTimer()
+		self.timer.timeout.connect(self.update_label_time)
+		self.timer.start(1000)
 
 		# Slider top label
 		frequency_label = QLabel("Frequency (ms):", alignment=Qt.AlignmentFlag.AlignCenter)
@@ -118,9 +139,10 @@ class QTMainTab(QWidget):
 			self.sender = SerialSender(self.serial_port_names)
 			self.sender.start(frequency=self.serial_frequency)
 			self.serial_active = True
+			self.active_start_time = datetime.now()
 
    			# Update UI elements
-			self.serial_start_stop_label.setText("Active")
+			self.serial_start_stop_label.setText("Active (00:00:00)")
 			self.serial_start_stop_label.setStyleSheet("QLabel { color: green; font-weight: bold; }")
 			self.serial_start_stop_button.setText("Stop serial")
 			self.frequency_slider.setEnabled(False)
@@ -129,6 +151,16 @@ class QTMainTab(QWidget):
 	def serial_port_list_update(self):
 		self.serial_port_names = [port_name.strip() for port_name in self.serial_port_list.toPlainText().split("\n") if port_name.strip()]
 		self.parent.settings.setValue("main/ports", "\n".join(self.serial_port_names))
+
+	def update_label_time(self):
+		if self.serial_active:
+			elapsed = datetime.now() - self.active_start_time
+			self.active_hours, remainder = divmod(elapsed.seconds, 3600)
+			self.active_minutes, self.active_seconds = divmod(remainder, 60)
+			timer_str = f"{self.active_hours:01d}:{self.active_minutes:02d}:{self.active_seconds:02d}"
+			self.serial_start_stop_label.setText(f"Active ({timer_str})")
+			sys.stdout.write(f"\rSending data ({timer_str})")
+			sys.stdout.flush()
 
 class QTLogTab(QWidget):
 	def __init__(self):

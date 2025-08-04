@@ -1,2 +1,2 @@
 # FalconBMSToSerial
-Reads Falcon BMS from sharedmem and sends it over serial ports
+QT6 app for reading Falcon BMS sharedmem and sending the data over serial written in python
