@@ -1,11 +1,19 @@
 import sys
+import os
 from datetime import datetime
 from typing import List
 from serialsender import SerialSender
 from logger import log_info, log_error, log_status, setup_log_timer, clear_log
 from PyQt6.QtWidgets import QMainWindow, QApplication, QPushButton, QTabWidget, QWidget, QVBoxLayout, QGridLayout, QTextEdit, QLabel, QSlider
 from PyQt6.QtCore import Qt, QSettings, QTimer
-from PyQt6.QtGui import QFont
+from PyQt6.QtGui import QFont, QIcon
+
+if getattr(sys, 'frozen', False):
+    # Running as bundled by PyInstaller
+    base_path = sys._MEIPASS
+else:
+    # Running from source
+    base_path = os.path.abspath(".")
 
 class QTMainTab(QWidget):
 	def __init__(self, parent, init_freq: int = 250, init_ports: List[str] = []):
@@ -161,7 +169,9 @@ class MainWindow(QMainWindow):
 		tabs.addTab(self.log_tab, "Logs")
 
 		self.setCentralWidget(tabs)
-		self.setWindowTitle("Serial Control Interface")
+		self.setWindowTitle("Falcon BMS to Serial")
+		icon_path = os.path.join(base_path, "icon.ico")
+		self.setWindowIcon(QIcon(icon_path))
 		self.resize(800, 500)
 		self.show()
 

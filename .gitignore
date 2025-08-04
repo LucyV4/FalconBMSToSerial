@@ -1,2 +1,6 @@
 __pycache__
 app.log
+
+# Pyinstaller stuff
+dist
+build
