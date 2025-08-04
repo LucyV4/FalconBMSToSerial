@@ -113,7 +113,7 @@ class QTMainTab(QWidget):
 			self.active_start_time = datetime.now()
 
    			# Update UI elements
-			self.serial_start_stop_label.setText("Active (00:00:00)")
+			self.serial_start_stop_label.setText("Active (0:00:00)")
 			self.serial_start_stop_label.setStyleSheet("QLabel { color: green; font-weight: bold; }")
 			self.serial_start_stop_button.setText("Stop serial")
 			self.frequency_slider.setEnabled(False)

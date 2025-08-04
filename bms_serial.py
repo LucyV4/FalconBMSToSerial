@@ -51,7 +51,7 @@ class SerialSender:
 				try:
 					port.write(data)
 				except Exception as e:
-					log_error(f"Error writing to {port.port}: {e}")
+					log_error(f"Writing to {port.port} failed.")
 					ports_to_remove.append(port)
 
 			for port in ports_to_remove:
