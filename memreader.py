@@ -2,7 +2,7 @@ import os, sys
 import importlib.util
 import ctypes
 
-file_path = os.path.abspath("./falcon-memreader/falcon-memreader.py")
+file_path = os.path.abspath("./falcon_memreader/falcon-memreader.py")
 module_name = "falcon_memreader"
 spec = importlib.util.spec_from_file_location(module_name, file_path)
 module = importlib.util.module_from_spec(spec)
