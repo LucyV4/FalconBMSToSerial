@@ -1,8 +1,10 @@
-import serial
-from serial.tools import list_ports
 import time
 import threading
 from typing import List
+
+import serial
+from serial.tools import list_ports
+
 from logger import log_info, log_error, log_warning
 from memreader import create_package
 

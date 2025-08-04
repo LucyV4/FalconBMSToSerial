@@ -1,7 +1,9 @@
 import sys
 import queue
 import logging
+
 from enum import Enum
+
 from PyQt6.QtCore import QTimer
 from PyQt6.QtGui import QTextCharFormat, QColor
 from PyQt6.QtWidgets import QTextEdit

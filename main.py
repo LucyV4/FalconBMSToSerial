@@ -1,10 +1,12 @@
 import sys
 import os
-from datetime import datetime
 from typing import List
+from datetime import datetime
+
 from bms_serial import SerialSender, detect_serial_ports
 from memreader import check_game_active, get_game_version
 from logger import log_info, log_error, log_status, setup_log_timer, clear_log
+
 from PyQt6.QtWidgets import QMainWindow, QApplication, QPushButton, QTabWidget, QWidget, QVBoxLayout, QGridLayout, QTextEdit, QLabel, QSlider
 from PyQt6.QtCore import Qt, QSettings, QTimer
 from PyQt6.QtGui import QFont, QIcon
