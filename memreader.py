@@ -1,7 +1,4 @@
-import os, sys
-import importlib.util
 import ctypes
-
 from falcon_memreader import falcon_memreader
 
 class BMSMemReader:

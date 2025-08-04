@@ -2,59 +2,10 @@ import sys
 from datetime import datetime
 from typing import List
 from serialsender import SerialSender
-from PyQt6.QtWidgets import QMainWindow, QApplication, QPushButton, QTabWidget, QWidget, QVBoxLayout, QGridLayout, QTextEdit, QLabel, QSlider, QPlainTextEdit
-from PyQt6.QtCore import Qt, QObject, pyqtSignal, QSettings, QTimer
-
-class TeeStream:
-    def __init__(self, *streams):
-        self.streams = streams
-
-    def write(self, msg):
-        for stream in self.streams:
-            stream.write(msg)
-        for stream in self.streams:
-            stream.flush()
-
-    def flush(self):
-        for stream in self.streams:
-            stream.flush()
-
-class QTextEditLogger(QObject):
-	write_signal = pyqtSignal(str)
-
-	def __init__(self, text_edit: QTextEdit):
-		super().__init__()
-		self.text_edit = text_edit
-		self.write_signal.connect(self._append_text)
-		self.last_line_overwrite = False
-		self.needs_newline = False
-
-	def write(self, msg):
-		if '\r' in msg:
-			msg = msg.replace('\r', '')
-			self.last_line_overwrite = True
-			self.needs_newline = True
-		elif self.needs_newline:
-			msg = '\n' + msg
-			self.needs_newline = False
-			self.last_line_overwrite = False
-		self.write_signal.emit(str(msg))
-
-	def flush(self):
-		pass
-
-	def _append_text(self, msg):
-		cursor = self.text_edit.textCursor()
-		cursor.movePosition(cursor.MoveOperation.End)
-
-		if self.last_line_overwrite:
-			cursor.select(cursor.SelectionType.LineUnderCursor)
-			cursor.removeSelectedText()
-			self.last_line_overwrite = False
-
-		cursor.insertText(msg)
-		self.text_edit.setTextCursor(cursor)
-		self.text_edit.ensureCursorVisible()
+from logger import log_info, log_error, log_status, setup_log_timer, clear_log
+from PyQt6.QtWidgets import QMainWindow, QApplication, QPushButton, QTabWidget, QWidget, QVBoxLayout, QGridLayout, QTextEdit, QLabel, QSlider
+from PyQt6.QtCore import Qt, QSettings, QTimer
+from PyQt6.QtGui import QFont
 
 class QTMainTab(QWidget):
 	def __init__(self, parent, init_freq: int = 250, init_ports: List[str] = []):
@@ -159,8 +110,9 @@ class QTMainTab(QWidget):
 			self.active_minutes, self.active_seconds = divmod(remainder, 60)
 			timer_str = f"{self.active_hours:01d}:{self.active_minutes:02d}:{self.active_seconds:02d}"
 			self.serial_start_stop_label.setText(f"Active ({timer_str})")
-			sys.stdout.write(f"\rSending data ({timer_str})")
-			sys.stdout.flush()
+			log_status(f"Sending data ({timer_str})")
+			# sys.stdout.write(f"\rSending data ({timer_str})")
+			# sys.stdout.flush()
 
 class QTLogTab(QWidget):
 	def __init__(self):
@@ -170,31 +122,36 @@ class QTLogTab(QWidget):
 
 		self.log_area = QTextEdit()
 		self.log_area.setReadOnly(True)
-		self.log_area.append("")
+		log_info("App opened")
 
-		self.clear_log_button = QPushButton("CLear logs")
+		font = QFont("Courier New")
+		font.setStyleHint(QFont.StyleHint.Monospace)
+		font.setWeight(500)
+		font.setPointSize(10)
+		self.log_area.setFont(font)
+
+		self.clear_log_button = QPushButton("Clear logs")
 		self.clear_log_button.clicked.connect(self.clear_logs)
 
 		layout.addWidget(self.log_area)
 		layout.addWidget(self.clear_log_button)
 		self.setLayout(layout)
 
-		# Redirect stdout to log area
-		self.logger = QTextEditLogger(self.log_area)
-		sys.stdout = TeeStream(sys.__stdout__, self.logger)
-		sys.stderr = TeeStream(sys.__stderr__, self.logger)
-  
+		# Start timer to update logs safely
+		self.log_timer = setup_log_timer(self.log_area, QApplication.instance())
+
 	def clear_logs(self):
-		self.log_area.setText("Cleared logs\n")
+		clear_log(self.log_area)
 
 class MainWindow(QMainWindow):
 	def __init__(self):
+		super().__init__()
+
 		self.settings = QSettings("LucyV", "FalconBMSToSerial")
 
 		init_freq = int(self.settings.value("main/frequency", 250))
 		init_ports = str(self.settings.value("main/ports", "")).split("\n")
 
-		super().__init__()
 		tabs = QTabWidget()
 
 		self.main_tab = QTMainTab(self, init_freq, init_ports)
@@ -205,7 +162,7 @@ class MainWindow(QMainWindow):
 
 		self.setCentralWidget(tabs)
 		self.setWindowTitle("Serial Control Interface")
-		self.resize(500, 300)
+		self.resize(800, 500)
 		self.show()
 
 try:
@@ -213,6 +170,6 @@ try:
 	w = MainWindow()
 	app.exec()
 except Exception as e:
-	print("Closing app due to error:", e)
+	log_error(f"Closing app due to error: {e}")
 finally:
 	if w.main_tab.serial_active: w.main_tab.sender.stop()

@@ -1,78 +1,83 @@
 import serial
-import asyncio
+import time
 import threading
 from typing import List
+from logger import log_info, log_error, log_warning
 from memreader import BMSMemReader
 
 memReader = BMSMemReader()
 
 class SerialSender:
 	def __init__(self, port_names: List[str]):
-		self.serial_ports: List[serial.Serial] = []
 		self.port_names = port_names
-	
+		self.serial_ports: List[serial.Serial] = []
+		self.running = False
+		self.thread = None
+		self.frequency = 250  # default
+
 	def init_ports(self):
 		ports_initialized = [port.port for port in self.serial_ports]
-		ports_to_initialize = [port_name for port_name in self.port_names if port_name not in ports_initialized]
-  
+		ports_to_initialize = [p for p in self.port_names if p not in ports_initialized]
+
 		for port_name in ports_to_initialize:
 			try:
 				port = serial.Serial(port_name, 115200)
 				self.serial_ports.append(port)
-				print(f"Connected to {port_name}")
+				log_info(f"Connected to {port_name}")
 			except serial.SerialException as e:
-				if "FileNotFoundError" in str(e): print(f"Error connecting to {port_name}: Serial device does not exist. Retrying in 5 seconds.")
-				elif "PermissionError" in str(e): print(f"Error connecting to {port_name}: No permission. Retrying in 5 seconds.")
-				else: print(f"Error connecting to {port_name}: \"{e}\". Retrying in 5 seconds")
-    
- 
+				port_not_initialized = True
+				if "FileNotFoundError" in str(e):
+					log_warning(f"Cannot connect to {port_name}: Device not found. Retrying in 5 seconds")
+				elif "PermissionError" in str(e):
+					log_warning(f"Cannot connect to {port_name}: Permission denied. Retrying in 5 seconds")
+				else:
+					log_error(f"Error connecting to {port_name}: \"{e}\"")
+
 	def start(self, frequency: int = 250):
-		print(f"STARTING SERIAL COMMUNICATION")
+		log_info("Starting serial communication")
 		self.frequency = frequency
-  
-		# Runs it asynchronously in a separate thread
-		self.loop = asyncio.new_event_loop()
-		self.t = threading.Thread(target=self.start_loop)
-		self.t.start()
-  
-		self.task = asyncio.run_coroutine_threadsafe(self.send(), self.loop)
-	
-	def stop(self):
-		print(f"STOPPING SERIAL COMMUNICATION")
+		self.running = True
+		self.thread = threading.Thread(target=self._run_loop, daemon=True)
+		self.thread.start()
 
-		# Stops the task safely
-		self.task.cancel()
-		self.loop.call_soon_threadsafe(self.loop.stop)
-		self.t.join()
-
-		for port in self.serial_ports:
-			port.close()
-		self.serial_ports.clear()
-	
-	def start_loop(self):
-		asyncio.set_event_loop(self.loop)
-		self.loop.run_forever()
-
-	async def send(self):
+	def _run_loop(self):
+		time_passed = 0
 		self.init_ports()
 
-		time_passed = 0
-		invalid_ports = []
-		while True:
+		while self.running:
 			data = memReader.create_package()
 			ports_to_remove = []
+
 			for port in self.serial_ports:
 				try:
 					port.write(data)
 				except Exception as e:
-					print(f"Error writing to {port.port}: {e}")
+					log_error(f"Error writing to {port.port}: {e}")
 					ports_to_remove.append(port)
-			
-			for port in ports_to_remove: self.serial_ports.remove(port)
 
-			await asyncio.sleep(self.frequency/1000)
+			for port in ports_to_remove:
+				try:
+					port.close()
+				except:
+					pass
+				self.serial_ports.remove(port)
 
 			if time_passed >= 5000:
-				time_passed -= 5000
+				time_passed = 0
 				self.init_ports()
-			else: time_passed += self.frequency
+			else:
+				time_passed += self.frequency
+
+			time.sleep(self.frequency / 1000.0)
+
+	def stop(self):
+		log_info("Stopping serial communication")
+		self.running = False
+		if self.thread and self.thread.is_alive():
+			self.thread.join(timeout=1)
+		for port in self.serial_ports:
+			try:
+				port.close()
+			except:
+				pass
+		self.serial_ports.clear()
