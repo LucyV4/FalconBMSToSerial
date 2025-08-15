@@ -64,7 +64,7 @@ def process_log_queue(text_edit: QTextEdit):
 		elif type == LogTypes.WARNING:
 			fmt.setForeground(QColor(200, 150, 0))
 		else:
-			fmt.setForeground(QColor("black"))
+			fmt.setForeground(QColor(0, 200, 180))
 		
 		if last_log_type == None: 
 			cursor = text_edit.textCursor()
