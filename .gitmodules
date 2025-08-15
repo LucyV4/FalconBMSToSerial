@@ -1,3 +1,3 @@
 [submodule "falcon-memreader"]
 	path = falcon_memreader
-	url = https://github.com/LucyV4/falcon-memreader
+	url = https://github.com/dglava/falcon-memreader
